@@ -15,6 +15,10 @@ on:
         type: string
 
 
+permissions:
+  contents: read
+  packages: write
+  
 env:
   IMAGE_NAME: postgres
   REGISTRY: ghcr.io
