@@ -122,9 +122,15 @@ jobs:
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "${{ steps.meta.outputs.json }}") \
-            $(printf '${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@%s ' $(cat *))
-            
-      - name: Inspect image
-        run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          TAGS="${{ steps.meta.outputs.tags }}"
+          TAGS_ARGS=""
+          for tag in $TAGS; do
+            TAGS_ARGS="$TAGS_ARGS -t $tag"
+          done
+          
+          DIGESTS=""
+          for digest_file in *; do
+            DIGESTS="$DIGESTS ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@$(cat $digest_file)"
+          done
+          
+          docker buildx imagetools create $TAGS_ARGS $DIGESTS
