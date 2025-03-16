@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'postgres-cnpg/**'
+      - '.github/workflows/publish-pg.yaml'
   workflow_dispatch:
     inputs:
       version:
@@ -15,7 +16,7 @@ on:
 
 
 env:
-  IMAGE_NAME: postgres-trunk
+  IMAGE_NAME: postgres
   REGISTRY: ghcr.io
   REGISTRY_USERNAME: ${{ github.actor }}
   REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
@@ -56,15 +57,12 @@ jobs:
             type=sha,format=short,prefix=
             type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
-
-      - name: Build and push by digest
+      - name: Build
         id: build
         uses: docker/build-push-action@v5
         with:
           context: postgres-cnpg
           platforms: linux/${{ matrix.platform.arch }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
