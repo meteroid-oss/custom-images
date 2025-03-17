@@ -19,7 +19,7 @@ permissions:
   packages: write
   
 env:
-  IMAGE_NAME: postgres
+  IMAGE_NAME: meteroid-postgres
   REGISTRY: ghcr.io
   REGISTRY_USERNAME: ${{ github.actor }}
   REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
