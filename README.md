@@ -1,5 +1,5 @@
 ### Custom images
 
-This repository builds and publish custom images for some of Meteroid's dependencies : 
+This repository builds and publish custom images for some of Meteroid's dependencies :
 
-- Postgres : Base image from CNPG (barmancloud, pg_audit), plus pgmq via trunk
+- postgres-cnpg : Base standard image from CNPG (pg_audit, pg_failover_slots, ...), plus pgmq

@@ -5,19 +5,19 @@ on:
     branches:
       - main
     paths:
-      - 'postgres-cnpg/**'
-      - '.github/workflows/publish-pg.yaml'
+      - "postgres-cnpg/**"
+      - ".github/workflows/publish-pg.yaml"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to tag the image with (e.g., 1.0.0) - should match Postgres version'
+        description: "Version to tag the image with (e.g., 18.0) - should match Postgres version"
         required: true
         type: string
 
 permissions:
   contents: read
   packages: write
-  
+
 env:
   IMAGE_NAME: meteroid-postgres
   REGISTRY: ghcr.io
@@ -33,9 +33,9 @@ jobs:
             arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
-    
+
     runs-on: ${{ matrix.platform.runner }}
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -85,7 +85,7 @@ jobs:
           name: digests-${{ matrix.platform.arch }}
           path: /tmp/digests/${{ matrix.platform.arch }}
           retention-days: 1
- 
+
   merge:
     needs: build
     runs-on: ubuntu-latest
@@ -117,7 +117,6 @@ jobs:
             type=sha,format=short,prefix=
             type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
 
-
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
@@ -126,10 +125,10 @@ jobs:
           for tag in $TAGS; do
             TAGS_ARGS="$TAGS_ARGS -t $tag"
           done
-          
+
           DIGESTS=""
           for digest_file in *; do
             DIGESTS="$DIGESTS ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}@$(cat $digest_file)"
           done
-          
+
           docker buildx imagetools create $TAGS_ARGS $DIGESTS
