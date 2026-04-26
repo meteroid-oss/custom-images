@@ -20,8 +20,8 @@ on:
         type: choice
         options:
           - all
-          - cnpg
           - standard
+          - cnpg
         default: all
 
 permissions:
@@ -36,19 +36,30 @@ env:
   PGMQ_VERSION: 1.11.0
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.set-images.outputs.images }}
+    steps:
+      - id: set-images
+        run: |
+          IMAGES='[
+            {"context":"postgres",      "target":"standard", "tag_suffix":"-standard"},
+            {"context":"postgres-cnpg", "target":"cnpg",     "tag_suffix":"-cnpg"}
+          ]'
+          TARGET="${{ inputs.target }}"
+
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "$TARGET" == "all" ]]; then
+            echo "images=$(echo "$IMAGES" | jq -c '.')" >> $GITHUB_OUTPUT
+          else
+            echo "images=$(echo "$IMAGES" | jq -c "[.[] | select(.target == \"$TARGET\")]")" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: setup
     strategy:
       matrix:
-        image:
-          # From 18.4+: standalone image uses plain version tag (e.g. 18.4)
-          # CNPG image uses -cnpg suffix (e.g. 18.4-cnpg)
-          # Note: 18.3 and earlier used plain tags for CNPG (legacy, do not reuse)
-          - context: postgres
-            target: standard
-            tag_suffix: "-standard"
-          - context: postgres-cnpg
-            target: cnpg
-            tag_suffix: "-cnpg"
+        image: ${{ fromJSON(needs.setup.outputs.images) }}
         platform:
           - runner: ubuntu-latest
             arch: amd64
@@ -56,7 +67,6 @@ jobs:
             arch: arm64
 
     runs-on: ${{ matrix.platform.runner }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == matrix.image.target }}
 
     steps:
       - name: Checkout repository
@@ -110,16 +120,11 @@ jobs:
           retention-days: 1
 
   merge:
-    needs: build
+    needs: [setup, build]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image:
-          - target: standard
-            tag_suffix: "-standard"
-          - target: cnpg
-            tag_suffix: "-cnpg"
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.target == 'all' || inputs.target == matrix.image.target }}
+        image: ${{ fromJSON(needs.setup.outputs.images) }}
     steps:
       - name: Download digests
         uses: actions/download-artifact@v8
