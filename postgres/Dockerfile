@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install --no-install-recommends --yes \
     make=4.* \
     && rm -r /var/lib/apt/lists/*
 WORKDIR /build
+ARG PGMQ_VERSION
 ADD https://github.com/pgmq/pgmq.git#v${PGMQ_VERSION}:pgmq-extension ./
 RUN make && make install
 
