@@ -6,28 +6,60 @@ on:
       - main
     paths:
       - "postgres-cnpg/**"
+      - "postgres/**"
       - ".github/workflows/publish-pg.yaml"
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to tag the image with (e.g., 18.0) - should match Postgres version"
+        description: "Version to tag the image with (e.g., 18.3) - should match Postgres version"
         required: true
         type: string
+      target:
+        description: "Which image to build (standard, cnpg, or all)"
+        required: true
+        type: choice
+        options:
+          - all
+          - standard
+          - cnpg
+        default: all
 
 permissions:
   contents: read
   packages: write
 
 env:
-  IMAGE_NAME: meteroid-postgres
   REGISTRY: ghcr.io
   REGISTRY_USERNAME: ${{ github.actor }}
   REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+  IMAGE_NAME: meteroid-postgres
+  PGMQ_VERSION: 1.11.0
 
 jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.set-images.outputs.images }}
+    steps:
+      - id: set-images
+        run: |
+          IMAGES='[
+            {"context":"postgres",      "target":"standard", "tag_suffix":"-standard"},
+            {"context":"postgres-cnpg", "target":"cnpg",     "tag_suffix":"-cnpg"}
+          ]'
+          TARGET="${{ inputs.target }}"
+
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" || "$TARGET" == "all" ]]; then
+            echo "images=$(echo "$IMAGES" | jq -c '.')" >> $GITHUB_OUTPUT
+          else
+            echo "images=$(echo "$IMAGES" | jq -c "[.[] | select(.target == \"$TARGET\")]")" >> $GITHUB_OUTPUT
+          fi
+
   build:
+    needs: setup
     strategy:
       matrix:
+        image: ${{ fromJSON(needs.setup.outputs.images) }}
         platform:
           - runner: ubuntu-latest
             arch: amd64
@@ -55,6 +87,8 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=${{ matrix.image.tag_suffix }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event_name != 'workflow_dispatch' }}
             type=sha,format=short,prefix=
@@ -64,37 +98,39 @@ jobs:
         id: build
         uses: docker/build-push-action@v7
         with:
-          context: postgres-cnpg
+          context: ${{ matrix.image.context }}
           platforms: linux/${{ matrix.platform.arch }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: PGMQ_VERSION=${{ env.PGMQ_VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           outputs: type=image,name=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
 
       - name: Export digest
         run: |
-          mkdir -p /tmp/digests
+          mkdir -p /tmp/digests/${{ matrix.image.target }}
           digest="${{ steps.build.outputs.digest }}"
-          arch="${{ matrix.platform.arch }}"
-          echo "$digest" > "/tmp/digests/${arch}"
-          echo "DIGEST=${digest}" >> $GITHUB_ENV
+          echo "$digest" > "/tmp/digests/${{ matrix.image.target }}/${{ matrix.platform.arch }}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v7
         with:
-          name: digests-${{ matrix.platform.arch }}
-          path: /tmp/digests/${{ matrix.platform.arch }}
+          name: digests-${{ matrix.image.target }}-${{ matrix.platform.arch }}
+          path: /tmp/digests/${{ matrix.image.target }}/${{ matrix.platform.arch }}
           retention-days: 1
 
   merge:
-    needs: build
+    needs: [setup, build]
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: ${{ fromJSON(needs.setup.outputs.images) }}
     steps:
       - name: Download digests
         uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: digests-${{ matrix.image.target }}-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -112,6 +148,8 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=${{ matrix.image.tag_suffix }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event_name != 'workflow_dispatch' }}
             type=sha,format=short,prefix=
