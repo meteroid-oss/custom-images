@@ -1,0 +1,62 @@
+name: Build and Push Smokescreen Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "smokescreen/**"
+      - ".github/workflows/publish-smokescreen.yaml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Smokescreen release tag to build (e.g., v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: smokescreen
+  SMOKESCREEN_VERSION: ${{ inputs.version || 'v0.1.0' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event_name != 'workflow_dispatch' }}
+            type=match,pattern=v(.*),group=1,value=${{ env.SMOKESCREEN_VERSION }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: smokescreen
+          platforms: linux/amd64,linux/arm64
+          build-args: SMOKESCREEN_VERSION=${{ env.SMOKESCREEN_VERSION }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=smokescreen
+          cache-to: type=gha,scope=smokescreen,mode=max
+          push: true
