@@ -1,4 +1,4 @@
-ARG POSTGRESQL_VERSION=18.3-standard-trixie
+ARG POSTGRESQL_VERSION=18.7-standard-trixie
 ARG PGMQ_VERSION
 
 # consider the new standard model (though barman plugin is experimental) https://github.com/cloudnative-pg/postgres-containers
